@@ -248,8 +248,18 @@ pub async fn fetch_channel_info(username: &str) -> Result<ChannelInfo> {
 async fn fetch_channel_info_inner(username: &str) -> Result<ChannelInfo> {
     let url = format!("https://kick.com/api/v2/channels/{}", username);
 
-    let output = tokio::process::Command::new("curl")
-        .args(["-s", "-H", "Accept: application/json", "-H", "User-Agent: Chatterino7", &url])
+    let mut cmd = tokio::process::Command::new("curl");
+    cmd.args(["-s", "-H", "Accept: application/json", "-H", "User-Agent: Chatterino7", &url]);
+
+    // Prevent a visible console window from flashing on Windows
+    #[cfg(target_os = "windows")]
+    {
+        #[allow(unused_imports)]
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
+    let output = cmd
         .output()
         .await
         .map_err(|e| KickApiError::UnexpectedError(format!(
