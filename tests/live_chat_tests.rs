@@ -1,4 +1,4 @@
-use kick_api::LiveChatClient;
+use kick_api::{LiveChatClient, fetch_channel_info};
 use std::time::Duration;
 
 /// Integration test: connect by username and read events.
@@ -31,6 +31,96 @@ async fn test_connect_by_username() {
         Ok(Ok(None)) => println!("Connection closed"),
         Ok(Err(e)) => panic!("Error: {}", e),
         Err(_) => println!("No events in 10s — channel is quiet, but connection works"),
+    }
+
+    chat.close().await.expect("Should close cleanly");
+}
+
+/// Integration test: fetch full channel info including chatroom settings and badges.
+///
+/// Run with:
+///   cargo test --test live_chat_tests -- --ignored test_fetch_channel_info
+#[tokio::test]
+#[ignore]
+async fn test_fetch_channel_info() {
+    let username = std::env::var("KICK_TEST_USERNAME")
+        .unwrap_or_else(|_| "hello_kiko".to_string());
+
+    let info = fetch_channel_info(&username)
+        .await
+        .expect("Should fetch channel info");
+
+    // Basic channel info
+    println!("Channel: {} (ID: {})", info.slug, info.id);
+    assert_eq!(info.slug, username);
+    assert!(info.id > 0);
+    assert!(info.user_id > 0);
+
+    // Chatroom info
+    println!("Chatroom ID: {}", info.chatroom.id);
+    println!("Chat mode: {:?}", info.chatroom.chat_mode);
+    println!("Slow mode: {} ({}s interval)", info.chatroom.slow_mode, info.chatroom.message_interval);
+    println!("Followers only: {}", info.chatroom.followers_mode);
+    println!("Subscribers only: {}", info.chatroom.subscribers_mode);
+    assert!(info.chatroom.id > 0);
+
+    // Subscriber badges
+    println!("Subscriber badge tiers: {}", info.subscriber_badges.len());
+    for badge in &info.subscriber_badges {
+        println!("  {}mo: {}", badge.months, badge.badge_image.src);
+        assert!(badge.months > 0);
+        assert!(!badge.badge_image.src.is_empty());
+    }
+
+    // User profile
+    if let Some(user) = &info.user {
+        println!("User: {} (bio: {:?})", user.username, user.bio);
+        assert!(!user.username.is_empty());
+    }
+
+    // Livestream (may be None if offline)
+    match &info.livestream {
+        Some(stream) => {
+            println!("LIVE: {} — {} viewers", stream.session_title.as_deref().unwrap_or("(no title)"), stream.viewer_count);
+            assert!(stream.is_live);
+        }
+        None => println!("Channel is offline"),
+    }
+
+    println!("Followers: {}, Verified: {}", info.followers_count, info.verified);
+}
+
+/// Integration test: fetch channel info and use chatroom ID to connect.
+///
+/// Run with:
+///   cargo test --test live_chat_tests -- --ignored test_fetch_then_connect
+#[tokio::test]
+#[ignore]
+async fn test_fetch_then_connect() {
+    let username = std::env::var("KICK_TEST_USERNAME")
+        .unwrap_or_else(|_| "hello_kiko".to_string());
+
+    // Step 1: fetch channel info
+    let info = fetch_channel_info(&username)
+        .await
+        .expect("Should fetch channel info");
+
+    let chatroom_id = info.chatroom.id;
+    println!("Resolved {} -> chatroom {}", username, chatroom_id);
+
+    // Step 2: connect using the chatroom ID
+    let mut chat = LiveChatClient::connect(chatroom_id)
+        .await
+        .expect("Should connect with resolved chatroom ID");
+
+    // Step 3: try to read an event
+    let result = tokio::time::timeout(Duration::from_secs(10), chat.next_event()).await;
+
+    match result {
+        Ok(Ok(Some(event))) => println!("Got event: {}", event.event),
+        Ok(Ok(None)) => println!("Connection closed"),
+        Ok(Err(e)) => panic!("Error: {}", e),
+        Err(_) => println!("No events in 10s — connection works"),
     }
 
     chat.close().await.expect("Should close cleanly");

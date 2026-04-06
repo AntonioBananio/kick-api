@@ -1,4 +1,5 @@
 mod channel;
+mod channel_info;
 mod chat;
 mod event;
 pub(crate) mod live_chat;
@@ -7,6 +8,7 @@ mod reward;
 mod user;
 
 pub use channel::*;
+pub use channel_info::*;
 pub use chat::*;
 pub use event::*;
 pub use live_chat::{

@@ -2,6 +2,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 use crate::error::{KickApiError, Result};
+use crate::models::ChannelInfo;
 use crate::models::live_chat::{LiveChatMessage, PusherEvent, PusherMessage};
 
 const PUSHER_URL: &str = "wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0&flash=false";
@@ -65,8 +66,8 @@ impl LiveChatClient {
     /// # }
     /// ```
     pub async fn connect_by_username(username: &str) -> Result<Self> {
-        let chatroom_id = lookup_chatroom_id(username).await?;
-        Self::connect(chatroom_id).await
+        let info = fetch_channel_info_inner(username).await?;
+        Self::connect(info.chatroom.id).await
     }
 
     /// Connect to a chatroom by its ID.
@@ -206,13 +207,45 @@ impl LiveChatClient {
     }
 }
 
-/// Look up a channel's chatroom ID from its username/slug using Kick's public v2 API.
+/// Fetch public channel information from Kick's v2 API.
+///
+/// Returns chatroom settings, subscriber badges, user profile, and livestream
+/// status for any channel. **No authentication required.**
 ///
 /// This uses `curl` as a subprocess because Kick's Cloudflare protection blocks
-/// HTTP libraries based on TLS fingerprinting. `curl` uses the OS-native TLS
-/// stack which Cloudflare allows. `curl` ships with Windows 10+, macOS, and
-/// virtually all Linux distributions.
-async fn lookup_chatroom_id(username: &str) -> Result<u64> {
+/// HTTP libraries based on TLS fingerprinting. `curl` ships with Windows 10+,
+/// macOS, and virtually all Linux distributions.
+///
+/// # Example
+///
+/// ```no_run
+/// use kick_api::fetch_channel_info;
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let info = fetch_channel_info("xqc").await?;
+///
+/// // Chatroom settings
+/// println!("Chatroom ID: {}", info.chatroom.id);
+/// println!("Slow mode: {}", info.chatroom.slow_mode);
+/// println!("Followers only: {}", info.chatroom.followers_mode);
+///
+/// // Subscriber badges
+/// for badge in &info.subscriber_badges {
+///     println!("{}mo badge: {}", badge.months, badge.badge_image.src);
+/// }
+///
+/// // Livestream status
+/// if let Some(stream) = &info.livestream {
+///     println!("{} is live with {} viewers", info.slug, stream.viewer_count);
+/// }
+/// # Ok(())
+/// # }
+/// ```
+pub async fn fetch_channel_info(username: &str) -> Result<ChannelInfo> {
+    fetch_channel_info_inner(username).await
+}
+
+async fn fetch_channel_info_inner(username: &str) -> Result<ChannelInfo> {
     let url = format!("https://kick.com/api/v2/channels/{}", username);
 
     let output = tokio::process::Command::new("curl")
@@ -231,17 +264,12 @@ async fn lookup_chatroom_id(username: &str) -> Result<u64> {
         )));
     }
 
-    let body: serde_json::Value = serde_json::from_slice(&output.stdout)
+    let info: ChannelInfo = serde_json::from_slice(&output.stdout)
         .map_err(|e| KickApiError::ApiError(format!(
             "Failed to parse channel response for '{}': {}", username, e
         )))?;
 
-    body["chatroom"]["id"]
-        .as_u64()
-        .ok_or_else(|| KickApiError::ApiError(format!(
-            "Channel '{}' not found or missing chatroom ID",
-            username
-        )))
+    Ok(info)
 }
 
 /// Wait for a specific Pusher event on the WebSocket.

@@ -6,7 +6,7 @@ use kick_api::LiveChatClient;
 ///   cargo run --example read_chat -- <username>
 ///
 /// Example:
-///   cargo run --example read_chat -- hello_kiko
+///   cargo run --example read_chat -- xqc
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
@@ -16,7 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("Usage: cargo run --example read_chat -- <username>");
             eprintln!();
             eprintln!("Example:");
-            eprintln!("  cargo run --example read_chat -- hello_kiko");
+            eprintln!("  cargo run --example read_chat -- xqc");
             std::process::exit(1);
         }
     };
