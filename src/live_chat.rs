@@ -12,19 +12,24 @@ type WsStream = tokio_tungstenite::WebSocketStream<
 
 /// Client for receiving live chat messages over Kick's Pusher WebSocket.
 ///
-/// This connects to the public Pusher channel for a chatroom and yields
-/// chat messages in real time. No authentication is required.
+/// Connects to the public Pusher channel for a chatroom and yields chat
+/// messages in real time. **No authentication is required.**
 ///
-/// The chatroom ID can be found by visiting
-/// `https://kick.com/api/v2/channels/{slug}` in a browser and searching
-/// for `"chatroom":{"id":`.
+/// # Connecting
+///
+/// There are two ways to connect:
+///
+/// - [`connect_by_username`](Self::connect_by_username) — pass a Kick username
+///   and the chatroom ID is resolved automatically (requires `curl` on PATH).
+/// - [`connect`](Self::connect) — pass a chatroom ID directly.
 ///
 /// # Example
+///
 /// ```no_run
 /// use kick_api::LiveChatClient;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let mut chat = LiveChatClient::connect(27670567).await?;
+/// let mut chat = LiveChatClient::connect_by_username("xqc").await?;
 /// while let Some(msg) = chat.next_message().await? {
 ///     println!("{}: {}", msg.sender.username, msg.content);
 /// }
@@ -42,6 +47,28 @@ impl std::fmt::Debug for LiveChatClient {
 }
 
 impl LiveChatClient {
+    /// Connect to a chatroom by the channel's username/slug.
+    ///
+    /// Looks up the chatroom ID via Kick's public API and connects to the
+    /// WebSocket. No authentication is required.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use kick_api::LiveChatClient;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut chat = LiveChatClient::connect_by_username("xqc").await?;
+    /// while let Some(msg) = chat.next_message().await? {
+    ///     println!("{}: {}", msg.sender.username, msg.content);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn connect_by_username(username: &str) -> Result<Self> {
+        let chatroom_id = lookup_chatroom_id(username).await?;
+        Self::connect(chatroom_id).await
+    }
+
     /// Connect to a chatroom by its ID.
     ///
     /// Opens a WebSocket to Pusher and subscribes to the chatroom's public
@@ -177,6 +204,44 @@ impl LiveChatClient {
             .map_err(KickApiError::WebSocketError)?;
         Ok(())
     }
+}
+
+/// Look up a channel's chatroom ID from its username/slug using Kick's public v2 API.
+///
+/// This uses `curl` as a subprocess because Kick's Cloudflare protection blocks
+/// HTTP libraries based on TLS fingerprinting. `curl` uses the OS-native TLS
+/// stack which Cloudflare allows. `curl` ships with Windows 10+, macOS, and
+/// virtually all Linux distributions.
+async fn lookup_chatroom_id(username: &str) -> Result<u64> {
+    let url = format!("https://kick.com/api/v2/channels/{}", username);
+
+    let output = tokio::process::Command::new("curl")
+        .args(["-s", "-H", "Accept: application/json", "-H", "User-Agent: Chatterino7", &url])
+        .output()
+        .await
+        .map_err(|e| KickApiError::UnexpectedError(format!(
+            "Failed to run curl (is it installed?): {}", e
+        )))?;
+
+    if !output.status.success() {
+        return Err(KickApiError::ApiError(format!(
+            "curl failed for channel '{}': exit code {:?}",
+            username,
+            output.status.code()
+        )));
+    }
+
+    let body: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|e| KickApiError::ApiError(format!(
+            "Failed to parse channel response for '{}': {}", username, e
+        )))?;
+
+    body["chatroom"]["id"]
+        .as_u64()
+        .ok_or_else(|| KickApiError::ApiError(format!(
+            "Channel '{}' not found or missing chatroom ID",
+            username
+        )))
 }
 
 /// Wait for a specific Pusher event on the WebSocket.

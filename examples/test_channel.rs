@@ -1,12 +1,14 @@
- use kick_api::KickApiClient;
+use kick_api::KickApiClient;
 
-  #[tokio::main]
-  async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = KickApiClient::new();
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Note: channels().get() requires an OAuth token
+    let token = std::env::var("KICK_TOKEN").expect("Set KICK_TOKEN env var");
+    let client = KickApiClient::with_token(token);
 
     println!("Fetching channel info for 'xqc'...");
 
-    match client.get_channel("xqc").await {
+    match client.channels().get("xqc").await {
         Ok(channel) => {
             println!("Channel: {}", channel.slug);
             println!("Stream title: {:?}", channel.stream_title);
@@ -18,5 +20,5 @@
         Err(e) => eprintln!("Error: {}", e),
     }
 
-      Ok(())
-  }
+    Ok(())
+}

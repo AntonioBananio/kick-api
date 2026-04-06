@@ -1,0 +1,151 @@
+use kick_api::LiveChatClient;
+use std::time::Duration;
+
+/// Integration test: connect by username and read events.
+///
+/// Run with:
+///   cargo test --test live_chat_tests -- --ignored test_connect_by_username
+#[tokio::test]
+#[ignore]
+async fn test_connect_by_username() {
+    let username = std::env::var("KICK_TEST_USERNAME")
+        .unwrap_or_else(|_| "hello_kiko".to_string());
+
+    println!("Connecting to {}'s chat...", username);
+    let mut chat = LiveChatClient::connect_by_username(&username)
+        .await
+        .expect("Should connect by username");
+
+    // Try to read one event with a timeout
+    let result = tokio::time::timeout(
+        Duration::from_secs(10),
+        chat.next_event(),
+    )
+    .await;
+
+    match result {
+        Ok(Ok(Some(event))) => {
+            println!("Received event: {}", event.event);
+            assert!(!event.event.is_empty());
+        }
+        Ok(Ok(None)) => println!("Connection closed"),
+        Ok(Err(e)) => panic!("Error: {}", e),
+        Err(_) => println!("No events in 10s — channel is quiet, but connection works"),
+    }
+
+    chat.close().await.expect("Should close cleanly");
+}
+
+/// Integration test: connect to a real Kick chatroom and read events.
+///
+/// This test connects to a chatroom, waits briefly for any event, then
+/// disconnects. It verifies that the WebSocket handshake and Pusher
+/// subscription work correctly.
+///
+/// Note: This test hits a real WebSocket server and may be slow or flaky
+/// depending on network conditions. It is marked #[ignore] so it only
+/// runs when explicitly requested.
+///
+/// Run with:
+///   cargo test --test live_chat_tests -- --ignored
+#[tokio::test]
+#[ignore]
+async fn test_connect_to_chatroom() {
+    // Use a known active chatroom. You can replace this with hello_kiko's
+    // chatroom ID once you look it up.
+    // Visit https://kick.com/api/v2/channels/hello_kiko to find the ID.
+    let chatroom_id: u64 = std::env::var("KICK_TEST_CHATROOM_ID")
+        .unwrap_or_else(|_| "27670567".to_string())
+        .parse()
+        .expect("KICK_TEST_CHATROOM_ID must be a number");
+
+    let mut chat = LiveChatClient::connect(chatroom_id)
+        .await
+        .expect("Should connect to chatroom WebSocket");
+
+    // Try to read one event with a timeout — the chatroom may be quiet
+    let result = tokio::time::timeout(Duration::from_secs(10), chat.next_event()).await;
+
+    match result {
+        Ok(Ok(Some(event))) => {
+            println!("Received event: {}", event.event);
+            assert!(!event.event.is_empty());
+            assert!(!event.data.is_empty());
+        }
+        Ok(Ok(None)) => {
+            println!("Connection closed (chatroom may be inactive)");
+        }
+        Ok(Err(e)) => {
+            panic!("WebSocket error: {}", e);
+        }
+        Err(_) => {
+            // Timeout is fine — means we connected but no messages arrived
+            println!("No events in 10s (chatroom is quiet) — connection works");
+        }
+    }
+
+    chat.close().await.expect("Should close cleanly");
+}
+
+/// Integration test: connect and try to read a chat message.
+///
+/// Run with:
+///   cargo test --test live_chat_tests -- --ignored
+#[tokio::test]
+#[ignore]
+async fn test_read_chat_message() {
+    let chatroom_id: u64 = std::env::var("KICK_TEST_CHATROOM_ID")
+        .unwrap_or_else(|_| "27670567".to_string())
+        .parse()
+        .expect("KICK_TEST_CHATROOM_ID must be a number");
+
+    let mut chat = LiveChatClient::connect(chatroom_id)
+        .await
+        .expect("Should connect to chatroom WebSocket");
+
+    // Wait up to 30 seconds for a chat message
+    let result = tokio::time::timeout(Duration::from_secs(30), chat.next_message()).await;
+
+    match result {
+        Ok(Ok(Some(msg))) => {
+            println!("Got message from {}: {}", msg.sender.username, msg.content);
+            assert!(!msg.id.is_empty(), "Message ID should not be empty");
+            assert!(!msg.content.is_empty(), "Message content should not be empty");
+            assert!(!msg.sender.username.is_empty(), "Sender username should not be empty");
+            assert!(msg.sender.id > 0, "Sender ID should be positive");
+        }
+        Ok(Ok(None)) => {
+            println!("Connection closed before a message arrived");
+        }
+        Ok(Err(e)) => {
+            panic!("Error reading message: {}", e);
+        }
+        Err(_) => {
+            println!("No chat messages in 30s — channel is quiet, but connection works");
+        }
+    }
+
+    chat.close().await.expect("Should close cleanly");
+}
+
+/// Integration test: verify ping keeps the connection alive.
+///
+/// Run with:
+///   cargo test --test live_chat_tests -- --ignored
+#[tokio::test]
+#[ignore]
+async fn test_send_ping() {
+    let chatroom_id: u64 = std::env::var("KICK_TEST_CHATROOM_ID")
+        .unwrap_or_else(|_| "27670567".to_string())
+        .parse()
+        .expect("KICK_TEST_CHATROOM_ID must be a number");
+
+    let mut chat = LiveChatClient::connect(chatroom_id)
+        .await
+        .expect("Should connect to chatroom WebSocket");
+
+    // Sending a ping should not error
+    chat.send_ping().await.expect("Ping should succeed");
+
+    chat.close().await.expect("Should close cleanly");
+}

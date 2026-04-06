@@ -116,3 +116,128 @@ pub struct ChatBadge {
     #[serde(default)]
     pub count: Option<u32>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deserialize_chat_message() {
+        let json = r##"{
+            "id": "abc-123",
+            "chatroom_id": 12345,
+            "content": "hello world",
+            "type": "message",
+            "created_at": "2025-01-01T00:00:00Z",
+            "sender": {
+                "id": 9999,
+                "username": "hello_kiko",
+                "slug": "hello_kiko",
+                "identity": {
+                    "color": "#FF0000",
+                    "badges": []
+                }
+            }
+        }"##;
+
+        let msg: LiveChatMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.id, "abc-123");
+        assert_eq!(msg.chatroom_id, Some(12345));
+        assert_eq!(msg.content, "hello world");
+        assert_eq!(msg.r#type, "message");
+        assert_eq!(msg.sender.username, "hello_kiko");
+        assert_eq!(msg.sender.id, 9999);
+        assert_eq!(msg.sender.identity.color, "#FF0000");
+        assert!(msg.sender.identity.badges.is_empty());
+        assert!(msg.metadata.is_none());
+    }
+
+    #[test]
+    fn test_deserialize_chat_message_with_badges() {
+        let json = r##"{
+            "id": "msg-456",
+            "content": "gg",
+            "type": "message",
+            "sender": {
+                "id": 1234,
+                "username": "hello_kiko",
+                "identity": {
+                    "color": "#00FF00",
+                    "badges": [
+                        { "type": "subscriber", "text": "Subscriber", "count": 3 },
+                        { "type": "moderator", "text": "Moderator" }
+                    ]
+                }
+            }
+        }"##;
+
+        let msg: LiveChatMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.sender.identity.badges.len(), 2);
+        assert_eq!(msg.sender.identity.badges[0].r#type, "subscriber");
+        assert_eq!(msg.sender.identity.badges[0].count, Some(3));
+        assert_eq!(msg.sender.identity.badges[1].r#type, "moderator");
+        assert_eq!(msg.sender.identity.badges[1].count, None);
+        // Optional fields should be None when missing
+        assert!(msg.chatroom_id.is_none());
+        assert!(msg.created_at.is_none());
+        assert!(msg.sender.slug.is_none());
+    }
+
+    #[test]
+    fn test_deserialize_reply_message() {
+        let json = r##"{
+            "id": "reply-789",
+            "content": "I agree!",
+            "type": "reply",
+            "sender": {
+                "id": 5555,
+                "username": "test_user",
+                "identity": {
+                    "color": "#0000FF",
+                    "badges": []
+                }
+            },
+            "metadata": {
+                "original_sender": { "username": "hello_kiko" },
+                "original_message": { "content": "what do you think?" }
+            }
+        }"##;
+
+        let msg: LiveChatMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.r#type, "reply");
+        let meta = msg.metadata.unwrap();
+        assert_eq!(meta.original_sender.unwrap().username, "hello_kiko");
+        assert_eq!(meta.original_message.unwrap().content, "what do you think?");
+    }
+
+    #[test]
+    fn test_deserialize_pusher_message() {
+        // Pusher sends the event name with backslash-separated namespaces
+        // and double-encodes the data as a JSON string inside JSON.
+        let inner_data = serde_json::json!({
+            "id": "msg-1",
+            "content": "test",
+            "type": "message",
+            "sender": {
+                "id": 1,
+                "username": "hello_kiko",
+                "identity": { "color": "#FFF", "badges": [] }
+            }
+        });
+
+        let outer = serde_json::json!({
+            "event": "App\\Events\\ChatMessageEvent",
+            "data": inner_data.to_string(),
+            "channel": "chatrooms.12345.v2"
+        });
+
+        let pusher: PusherMessage = serde_json::from_value(outer).unwrap();
+        assert!(pusher.event.contains("ChatMessageEvent"));
+        assert_eq!(pusher.channel, Some("chatrooms.12345.v2".into()));
+
+        // Verify the double-encoded data can be parsed
+        let msg: LiveChatMessage = serde_json::from_str(&pusher.data).unwrap();
+        assert_eq!(msg.sender.username, "hello_kiko");
+        assert_eq!(msg.content, "test");
+    }
+}

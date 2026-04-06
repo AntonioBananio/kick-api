@@ -72,7 +72,7 @@ impl TokenIntrospection {
         self.active
     }
 
-    /// Get the scopes as a Vec<String>
+    /// Get the scopes as a `Vec<String>`
     pub fn scopes(&self) -> Vec<String> {
         self.scope
             .as_ref()
