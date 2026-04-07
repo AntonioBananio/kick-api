@@ -1,4 +1,4 @@
-use crate::api::{ChannelsApi, ChatApi, EventsApi, ModerationApi, RewardsApi, UsersApi};
+use crate::api::{ChannelsApi, ChatApi, EventsApi, LivestreamsApi, ModerationApi, RewardsApi, UsersApi};
 
 const KICK_BASE_URL: &str = "https://api.kick.com/public/v1";
 
@@ -101,6 +101,17 @@ impl KickApiClient {
     /// ```
     pub fn moderation(&self) -> ModerationApi<'_> {
         ModerationApi::new(&self.client, &self.oauth_token, &self.base_url)
+    }
+
+    /// Access the Livestreams API
+    ///
+    /// # Example
+    /// ```no_run
+    /// let streams = client.livestreams().get(None, None, None, None, None).await?;
+    /// let stats = client.livestreams().stats().await?;
+    /// ```
+    pub fn livestreams(&self) -> LivestreamsApi<'_> {
+        LivestreamsApi::new(&self.client, &self.oauth_token, &self.base_url)
     }
 
     /// Access the Events/Webhooks API

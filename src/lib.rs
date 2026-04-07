@@ -68,6 +68,20 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! For server-to-server access (no user interaction), use an App Access Token:
+//!
+//! ```no_run
+//! use kick_api::KickOAuth;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! // Only needs KICK_CLIENT_ID and KICK_CLIENT_SECRET
+//! let oauth = KickOAuth::from_env_server()?;
+//! let token = oauth.get_app_access_token().await?;
+//! let client = kick_api::KickApiClient::with_token(token.access_token);
+//! # Ok(())
+//! # }
+//! ```
 
 mod error;
 mod client;
@@ -82,4 +96,4 @@ pub use client::KickApiClient;
 pub use live_chat::{LiveChatClient, fetch_channel_info};
 pub use models::*;
 pub use oauth::{KickOAuth, OAuthTokenResponse};
-pub use api::{ChannelsApi, ChatApi, EventsApi, ModerationApi, RewardsApi, UsersApi};
+pub use api::{ChannelsApi, ChatApi, EventsApi, LivestreamsApi, ModerationApi, RewardsApi, UsersApi};

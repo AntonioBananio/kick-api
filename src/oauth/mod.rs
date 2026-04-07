@@ -30,6 +30,8 @@ pub struct OAuthTokenResponse {
 /// Holds OAuth credentials and client for Kick.com
 pub struct KickOAuth {
     client: BasicClient,
+    client_id: String,
+    client_secret: String,
 }
 
 impl KickOAuth {
@@ -56,14 +58,39 @@ impl KickOAuth {
 
         // Build the OAuth2 client (oauth2 4.4 API)
         let client = BasicClient::new(
-            ClientId::new(client_id),
-            Some(ClientSecret::new(client_secret)),
+            ClientId::new(client_id.clone()),
+            Some(ClientSecret::new(client_secret.clone())),
             auth_url,
             Some(token_url),
         )
         .set_redirect_uri(RedirectUrl::new(redirect_uri)?);
 
-        Ok(Self { client })
+        Ok(Self { client, client_id, client_secret })
+    }
+
+    /// Creates an OAuth client for server-to-server use (App Access Tokens only)
+    ///
+    /// Only requires KICK_CLIENT_ID and KICK_CLIENT_SECRET env vars.
+    /// No redirect URI needed since client credentials flow has no user interaction.
+    pub fn from_env_server() -> Result<Self, Box<dyn std::error::Error>> {
+        let client_id = env::var("KICK_CLIENT_ID")?;
+        let client_secret = env::var("KICK_CLIENT_SECRET")?;
+
+        if client_id.is_empty() || client_secret.is_empty() {
+            return Err("KICK_CLIENT_ID or KICK_CLIENT_SECRET is empty!".into());
+        }
+
+        let auth_url = AuthUrl::new("https://id.kick.com/oauth/authorize".to_string())?;
+        let token_url = TokenUrl::new("https://id.kick.com/oauth/token".to_string())?;
+
+        let client = BasicClient::new(
+            ClientId::new(client_id.clone()),
+            Some(ClientSecret::new(client_secret.clone())),
+            auth_url,
+            Some(token_url),
+        );
+
+        Ok(Self { client, client_id, client_secret })
     }
 
     /// Generates the authorization URL that users should visit
@@ -92,6 +119,47 @@ impl KickOAuth {
         (auth_url.to_string(), csrf_token, pkce_verifier)
     }
 
+    /// Request an App Access Token using the client credentials grant
+    ///
+    /// This is a server-to-server flow that doesn't require user interaction.
+    /// The returned token can only access publicly available data.
+    ///
+    /// Note: The response will not include a `refresh_token` — just request
+    /// a new app access token when the current one expires.
+    ///
+    /// ```no_run
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let oauth = kick_api::KickOAuth::from_env_server()?;
+    /// let token = oauth.get_app_access_token().await?;
+    /// let client = kick_api::KickApiClient::with_token(token.access_token);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn get_app_access_token(
+        &self,
+    ) -> Result<OAuthTokenResponse, Box<dyn std::error::Error>> {
+        let http_client = reqwest::Client::new();
+        let response = http_client
+            .post("https://id.kick.com/oauth/token")
+            .form(&[
+                ("grant_type", "client_credentials"),
+                ("client_id", &self.client_id),
+                ("client_secret", &self.client_secret),
+            ])
+            .send()
+            .await?;
+
+        let status = response.status();
+        let body = response.text().await?;
+
+        if status.is_success() {
+            let token_response: OAuthTokenResponse = serde_json::from_str(&body)?;
+            Ok(token_response)
+        } else {
+            Err(format!("App access token request failed: {}", body).into())
+        }
+    }
+
     /// Exchanges the authorization code for an access token
     ///
     /// After the user authorizes, Kick redirects to your callback with a `code` parameter.
@@ -103,8 +171,6 @@ impl KickOAuth {
         code: String,
         pkce_verifier: PkceCodeVerifier,
     ) -> Result<OAuthTokenResponse, Box<dyn std::error::Error>> {
-        let client_id = env::var("KICK_CLIENT_ID")?;
-        let client_secret = env::var("KICK_CLIENT_SECRET")?;
         let redirect_uri = env::var("KICK_REDIRECT_URI")?;
 
         let http_client = reqwest::Client::new();
@@ -113,8 +179,8 @@ impl KickOAuth {
             .form(&[
                 ("grant_type", "authorization_code"),
                 ("code", &code),
-                ("client_id", &client_id),
-                ("client_secret", &client_secret),
+                ("client_id", &self.client_id),
+                ("client_secret", &self.client_secret),
                 ("redirect_uri", &redirect_uri),
                 ("code_verifier", pkce_verifier.secret()),
             ])
@@ -143,17 +209,14 @@ impl KickOAuth {
         &self,
         refresh_token: &str,
     ) -> Result<OAuthTokenResponse, Box<dyn std::error::Error>> {
-        let client_id = env::var("KICK_CLIENT_ID")?;
-        let client_secret = env::var("KICK_CLIENT_SECRET")?;
-
         let http_client = reqwest::Client::new();
         let response = http_client
             .post("https://id.kick.com/oauth/token")
             .form(&[
                 ("grant_type", "refresh_token"),
                 ("refresh_token", refresh_token),
-                ("client_id", &client_id),
-                ("client_secret", &client_secret),
+                ("client_id", &self.client_id),
+                ("client_secret", &self.client_secret),
             ])
             .send()
             .await?;
@@ -179,16 +242,13 @@ impl KickOAuth {
         &self,
         token: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let client_id = env::var("KICK_CLIENT_ID")?;
-        let client_secret = env::var("KICK_CLIENT_SECRET")?;
-
         let http_client = reqwest::Client::new();
         let response = http_client
             .post("https://id.kick.com/oauth/revoke")
             .form(&[
                 ("token", token),
-                ("client_id", &client_id),
-                ("client_secret", &client_secret),
+                ("client_id", &self.client_id),
+                ("client_secret", &self.client_secret),
             ])
             .send()
             .await?;

@@ -1,6 +1,7 @@
 mod channels;
 mod chat;
 mod events;
+mod livestreams;
 mod moderation;
 mod rewards;
 mod users;
@@ -8,6 +9,7 @@ mod users;
 pub use channels::ChannelsApi;
 pub use chat::ChatApi;
 pub use events::EventsApi;
+pub use livestreams::LivestreamsApi;
 pub use moderation::ModerationApi;
 pub use rewards::RewardsApi;
 pub use users::UsersApi;

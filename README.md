@@ -2,7 +2,7 @@
 
 Rust client for the [Kick.com API](https://kick.com).
 
-Covers channels, users, chat, moderation, rewards, event subscriptions, and **live chat over WebSocket**. Handles OAuth 2.1 (PKCE) authentication and automatic retry on rate limits (429).
+Covers channels, users, chat, moderation, rewards, livestreams, event subscriptions, and **live chat over WebSocket**. Handles OAuth 2.1 (PKCE + Client Credentials) authentication and automatic retry on rate limits (429).
 
 [![Crates.io](https://img.shields.io/crates/v/kick-api.svg)](https://crates.io/crates/kick-api)
 [![Docs.rs](https://docs.rs/kick-api/badge.svg)](https://docs.rs/kick-api)
@@ -85,7 +85,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | Module | Methods | Auth Required |
 |--------|---------|:---:|
 | **Live Chat** | `connect_by_username`, `connect`, `next_message`, `next_event`, `send_ping`, `close` | No |
-| **Channels** | `get`, `get_mine` | Yes |
+| **Channels** | `get`, `get_mine`, `update` | Yes |
+| **Livestreams** | `get`, `stats` | Yes |
 | **Users** | `get`, `get_me`, `introspect_token` | Yes |
 | **Chat** | `send_message`, `delete_message` | Yes |
 | **Moderation** | `ban`, `unban` | Yes |
@@ -96,7 +97,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 | Scope | Used By |
 |-------|---------|
-| `channel:read` | `channels().get()`, `channels().get_mine()` |
+| `channel:read` | `channels().get()`, `channels().get_mine()`, `livestreams().get()`, `livestreams().stats()` |
+| `channel:write` | `channels().update()` |
 | `user:read` | `users().get()`, `users().get_me()`, `users().introspect_token()` |
 | `chat:write` | `chat().send_message()` |
 | `moderation:chat_message:manage` | `chat().delete_message()` |
@@ -131,6 +133,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let me = client.users().get_me().await?;
     println!("Logged in as: {}", me.name);
 
+    Ok(())
+}
+```
+
+### App Access Token (Server-to-Server)
+
+For server-to-server access without user interaction:
+
+```rust
+use kick_api::{KickOAuth, KickApiClient};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Only needs KICK_CLIENT_ID and KICK_CLIENT_SECRET
+    let oauth = KickOAuth::from_env_server()?;
+    let token = oauth.get_app_access_token().await?;
+    let client = KickApiClient::with_token(token.access_token);
+
+    // Access public data (livestreams, categories, etc.)
+    let streams = client.livestreams().get(None, None, None, None, None).await?;
     Ok(())
 }
 ```

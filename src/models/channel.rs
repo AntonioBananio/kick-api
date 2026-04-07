@@ -62,6 +62,33 @@ pub struct Category {
     pub thumbnail: Option<String>,
 }
 
+/// Request body for updating channel/livestream metadata
+///
+/// At least one field must be specified. Requires `channel:write` scope.
+///
+/// # Example
+/// ```
+/// let update = kick_api::UpdateChannelRequest {
+///     category_id: None,
+///     stream_title: Some("New stream title!".to_string()),
+///     custom_tags: Some(vec!["rust".to_string(), "coding".to_string()]),
+/// };
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateChannelRequest {
+    /// Category ID to set for the stream (minimum 1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category_id: Option<u32>,
+
+    /// Stream title (minimum 1 character)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream_title: Option<String>,
+
+    /// Custom tags for the stream (maximum 10)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custom_tags: Option<Vec<String>>,
+}
+
 /// Live stream information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Stream {

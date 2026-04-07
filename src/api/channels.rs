@@ -1,5 +1,5 @@
 use crate::error::{KickApiError, Result};
-use crate::models::Channel;
+use crate::models::{Channel, UpdateChannelRequest};
 use reqwest;
 
 /// Channels API - handles all channel-related endpoints
@@ -63,6 +63,45 @@ impl<'a> ChannelsApi<'a> {
             Err(KickApiError::ApiError(format!(
                 "Failed to get channel: {}",
                 response.status()
+            )))
+        }
+    }
+
+    /// Update channel/livestream metadata
+    ///
+    /// Requires OAuth token with `channel:write` scope.
+    /// At least one field in the request must be set.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use kick_api::UpdateChannelRequest;
+    /// let update = UpdateChannelRequest {
+    ///     stream_title: Some("New title!".to_string()),
+    ///     category_id: None,
+    ///     custom_tags: Some(vec!["rust".to_string()]),
+    /// };
+    /// client.channels().update(update).await?;
+    /// ```
+    pub async fn update(&self, request: UpdateChannelRequest) -> Result<()> {
+        super::require_token(self.token)?;
+
+        let url = format!("{}/channels", self.base_url);
+        let req = self
+            .client
+            .patch(&url)
+            .header("Accept", "*/*")
+            .bearer_auth(self.token.as_ref().unwrap())
+            .json(&request);
+
+        let response = crate::http::send_with_retry(self.client, req).await?;
+        let status = response.status();
+        if status.is_success() {
+            Ok(())
+        } else {
+            let body = response.text().await.unwrap_or_default();
+            Err(KickApiError::ApiError(format!(
+                "Failed to update channel: {} - {}",
+                status, body
             )))
         }
     }
