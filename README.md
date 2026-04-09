@@ -80,18 +80,80 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## Unofficial API
+
+> **⚠️ These features use Kick's internal v2 API, not the public API. They are reverse-engineered and may break without notice.**
+
+Some functionality isn't available through Kick's official public API, so this crate provides access to internal endpoints using `curl` (to bypass Cloudflare TLS fingerprinting).
+
+### Channel Info (no auth)
+
+```rust
+use kick_api::fetch_channel_info;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let info = fetch_channel_info("xqc").await?;
+    println!("Chatroom ID: {}", info.chatroom.id);
+    println!("Followers: {}", info.followers_count);
+
+    if let Some(stream) = &info.livestream {
+        println!("Live with {} viewers!", stream.viewer_count);
+    }
+    Ok(())
+}
+```
+
+### Followed Channels (requires session token)
+
+Fetch the channels the authenticated user follows. This requires a **session/bearer token** from your browser cookies — not an OAuth App Access Token.
+
+```rust
+use kick_api::fetch_followed_channels;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let token = "your_session_token_from_browser";
+    let channels = fetch_followed_channels(token).await?;
+
+    for ch in &channels {
+        let status = match &ch.livestream {
+            Some(stream) if stream.is_live => format!("LIVE ({} viewers)", stream.viewer_count),
+            _ => "Offline".to_string(),
+        };
+        println!("{}: {}", ch.slug, status);
+    }
+    Ok(())
+}
+```
+
+### How to get a session token
+
+1. Log in to [kick.com](https://kick.com) in your browser
+2. Open Developer Tools → Application → Cookies
+3. Copy the value of `session_token` (or the `authorization` header from a network request)
+
 ## API Coverage
 
-| Module | Methods | Auth Required |
+### Official API (`api.kick.com/public/v1`)
+
+| Module | Methods | Auth |
 |--------|---------|:---:|
-| **Live Chat** | `connect_by_username`, `connect`, `next_message`, `next_event`, `send_ping`, `close` | No |
-| **Channels** | `get`, `get_mine`, `update` | Yes |
-| **Livestreams** | `get`, `stats` | Yes |
-| **Users** | `get`, `get_me`, `introspect_token` | Yes |
-| **Chat** | `send_message`, `delete_message` | Yes |
-| **Moderation** | `ban`, `unban` | Yes |
-| **Rewards** | `get_all`, `create`, `update`, `delete`, `manage_redemptions` | Yes |
-| **Events** | `list`, `subscribe`, `unsubscribe` | Yes |
+| **Channels** | `get`, `get_mine`, `update` | OAuth token |
+| **Livestreams** | `get`, `stats` | OAuth token |
+| **Users** | `get`, `get_me`, `introspect_token` | OAuth token |
+| **Chat** | `send_message`, `delete_message` | OAuth token |
+| **Moderation** | `ban`, `unban` | OAuth token |
+| **Rewards** | `get_all`, `create`, `update`, `delete`, `manage_redemptions` | OAuth token |
+| **Events** | `list`, `subscribe`, `unsubscribe` | OAuth token |
+
+### Unofficial API (`kick.com/api/v2`)
+
+| Function | Auth | Description |
+|----------|:---:|-------------|
+| `LiveChatClient` | None | Real-time chat messages via Pusher WebSocket |
+| `fetch_channel_info` | None | Chatroom settings, subscriber badges, livestream status |
+| `fetch_followed_channels` | Session token | Channels the authenticated user follows |
 
 ### OAuth Scopes
 

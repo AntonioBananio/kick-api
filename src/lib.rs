@@ -51,6 +51,36 @@
 //! # }
 //! ```
 //!
+//! ## Unofficial API
+//!
+//! Some features use Kick's **internal v2 API** (`kick.com/api/v2/...`) rather
+//! than the public API. These are reverse-engineered and **may break without
+//! notice**. They use `curl` as a subprocess to bypass Cloudflare TLS
+//! fingerprinting.
+//!
+//! | Function | Auth | Description |
+//! |----------|------|-------------|
+//! | [`LiveChatClient`] | None | Real-time chat via Pusher WebSocket |
+//! | [`fetch_channel_info`] | None | Chatroom settings, badges, livestream status |
+//! | [`fetch_followed_channels`] | Session token | Channels the authenticated user follows |
+//!
+//! ```no_run
+//! use kick_api::{fetch_channel_info, fetch_followed_channels};
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! // Public — no auth
+//! let info = fetch_channel_info("xqc").await?;
+//! println!("Chatroom ID: {}", info.chatroom.id);
+//!
+//! // Requires session token (from browser cookies, not an OAuth app token)
+//! let followed = fetch_followed_channels("your_session_token").await?;
+//! for ch in &followed {
+//!     println!("{}", ch.slug);
+//! }
+//! # Ok(())
+//! # }
+//! ```
+//!
 //! ## Authentication
 //!
 //! Kick uses OAuth 2.1 with PKCE. Use [`KickOAuth`] to handle the flow:

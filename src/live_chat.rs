@@ -14,6 +14,9 @@ type WsStream = tokio_tungstenite::WebSocketStream<
 
 /// Client for receiving live chat messages over Kick's Pusher WebSocket.
 ///
+/// **⚠️ Unofficial API** — This connects to Kick's internal Pusher WebSocket,
+/// not the public API. It may change or break without notice.
+///
 /// Connects to the public Pusher channel for a chatroom and yields chat
 /// messages in real time. **No authentication is required.**
 ///
@@ -209,6 +212,10 @@ impl LiveChatClient {
 }
 
 /// Fetch public channel information from Kick's v2 API.
+///
+/// **⚠️ Unofficial API** — This uses Kick's internal v2 API
+/// (`/api/v2/channels/{slug}`), not the public API. It may change or break
+/// without notice.
 ///
 /// Returns chatroom settings, subscriber badges, user profile, and livestream
 /// status for any channel. **No authentication required.**
