@@ -93,7 +93,7 @@ mod api;
 
 pub use error::{KickApiError, Result};
 pub use client::KickApiClient;
-pub use live_chat::{LiveChatClient, fetch_channel_info};
+pub use live_chat::{LiveChatClient, fetch_channel_info, fetch_followed_channels};
 pub use models::*;
 pub use oauth::{KickOAuth, OAuthTokenResponse};
 pub use api::{ChannelsApi, ChatApi, EventsApi, LivestreamsApi, ModerationApi, RewardsApi, UsersApi};

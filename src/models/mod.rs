@@ -2,6 +2,7 @@ mod channel;
 mod channel_info;
 mod chat;
 mod event;
+mod followed_channel;
 pub(crate) mod live_chat;
 mod livestream;
 mod moderation;
@@ -12,6 +13,7 @@ pub use channel::*;
 pub use channel_info::*;
 pub use chat::*;
 pub use event::*;
+pub use followed_channel::*;
 pub use livestream::*;
 pub use live_chat::{
     LiveChatMessage, ChatSender, ChatIdentity, ChatBadge, PusherEvent,

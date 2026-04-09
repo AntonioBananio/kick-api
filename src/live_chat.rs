@@ -3,6 +3,7 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 use crate::error::{KickApiError, Result};
 use crate::models::ChannelInfo;
+use crate::models::FollowedChannel;
 use crate::models::live_chat::{LiveChatMessage, PusherEvent, PusherMessage};
 
 const PUSHER_URL: &str = "wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0&flash=false";
@@ -243,6 +244,79 @@ impl LiveChatClient {
 /// ```
 pub async fn fetch_channel_info(username: &str) -> Result<ChannelInfo> {
     fetch_channel_info_inner(username).await
+}
+
+/// Fetch the list of channels the authenticated user follows.
+///
+/// **⚠️ Unofficial API** — This uses Kick's internal v2 API
+/// (`/api/v2/channels/followed`), not the public API. It may change or break
+/// without notice.
+///
+/// Requires a valid session/bearer token (the same token used when logged in
+/// to kick.com). This is **not** an OAuth App Access Token from the public
+/// API — it is the session token from your browser cookies.
+///
+/// Uses `curl` as a subprocess to bypass Cloudflare TLS fingerprinting.
+///
+/// # Example
+///
+/// ```no_run
+/// use kick_api::fetch_followed_channels;
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let token = "your_session_token";
+/// let channels = fetch_followed_channels(token).await?;
+/// for ch in &channels {
+///     let status = match &ch.livestream {
+///         Some(stream) if stream.is_live => format!("🔴 {} viewers", stream.viewer_count),
+///         _ => "Offline".to_string(),
+///     };
+///     println!("{}: {}", ch.slug, status);
+/// }
+/// # Ok(())
+/// # }
+/// ```
+pub async fn fetch_followed_channels(token: &str) -> Result<Vec<FollowedChannel>> {
+    let url = "https://kick.com/api/v2/channels/followed";
+    let auth_header = format!("Bearer {}", token);
+
+    let mut cmd = tokio::process::Command::new("curl");
+    cmd.args([
+        "-s",
+        "-H", "Accept: application/json",
+        "-H", "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "-H", &format!("Authorization: {}", auth_header),
+        url,
+    ]);
+
+    // Prevent a visible console window from flashing on Windows
+    #[cfg(target_os = "windows")]
+    {
+        #[allow(unused_imports)]
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
+    let output = cmd
+        .output()
+        .await
+        .map_err(|e| KickApiError::UnexpectedError(format!(
+            "Failed to run curl (is it installed?): {}", e
+        )))?;
+
+    if !output.status.success() {
+        return Err(KickApiError::ApiError(format!(
+            "curl failed for followed channels: exit code {:?}",
+            output.status.code()
+        )));
+    }
+
+    let channels: Vec<FollowedChannel> = serde_json::from_slice(&output.stdout)
+        .map_err(|e| KickApiError::ApiError(format!(
+            "Failed to parse followed channels response: {}", e
+        )))?;
+
+    Ok(channels)
 }
 
 async fn fetch_channel_info_inner(username: &str) -> Result<ChannelInfo> {
