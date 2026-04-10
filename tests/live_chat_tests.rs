@@ -1,4 +1,4 @@
-use kick_api::{LiveChatClient, fetch_channel_info};
+use kick_api::{LiveChatClient, fetch_channel_info, fetch_followed_channels};
 use std::time::Duration;
 
 /// Integration test: connect by username and read events.
@@ -216,6 +216,52 @@ async fn test_read_chat_message() {
     }
 
     chat.close().await.expect("Should close cleanly");
+}
+
+/// Integration test: fetch followed channels (unofficial API).
+///
+/// Requires a valid session token in KICK_SESSION_TOKEN env var.
+///
+/// Run with:
+///   KICK_SESSION_TOKEN=your_token cargo test --test live_chat_tests -- --ignored test_fetch_followed_channels
+#[tokio::test]
+#[ignore]
+async fn test_fetch_followed_channels() {
+    let token = std::env::var("KICK_SESSION_TOKEN")
+        .expect("KICK_SESSION_TOKEN env var required for this test");
+
+    let channels = fetch_followed_channels(&token)
+        .await
+        .expect("Should fetch followed channels");
+
+    println!("Following {} channels:", channels.len());
+    for ch in &channels {
+        let status = match &ch.livestream {
+            Some(stream) if stream.is_live => {
+                format!(
+                    "LIVE — {} ({} viewers)",
+                    stream.session_title.as_deref().unwrap_or("(no title)"),
+                    stream.viewer_count,
+                )
+            }
+            _ => "Offline".to_string(),
+        };
+        println!(
+            "  {} (ID: {}, followers: {}) — {}",
+            ch.slug, ch.id, ch.followers_count, status,
+        );
+    }
+
+    // Basic assertions — if we got here the API call and deserialization worked
+    // The user should be following at least one channel for a meaningful test
+    assert!(
+        !channels.is_empty(),
+        "Expected at least one followed channel (is the session token valid?)"
+    );
+
+    let first = &channels[0];
+    assert!(first.id > 0);
+    assert!(!first.slug.is_empty());
 }
 
 /// Integration test: verify ping keeps the connection alive.
