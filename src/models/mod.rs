@@ -3,11 +3,15 @@ mod channel_info;
 mod chat;
 mod event;
 mod followed_channel;
+mod helpers;
 pub(crate) mod live_chat;
 mod livestream;
 mod moderation;
 mod reward;
 mod user;
+
+// Экспортируем helper-функции
+pub use helpers::*;
 
 pub use channel::*;
 pub use channel_info::*;

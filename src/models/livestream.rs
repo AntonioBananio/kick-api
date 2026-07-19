@@ -1,80 +1,135 @@
+//! Livestream-related models.
+
 use serde::{Deserialize, Serialize};
 
+use super::helpers::{
+    deserialize_u64_or_string,
+    deserialize_u32_or_string,
+    deserialize_string_or_number,
+    deserialize_option_string_or_number,
+    deserialize_option_u64_or_string,
+};
+
+/// Current livestream information (used in ChannelInfo).
+#[derive(Debug, Clone, Deserialize)]
+pub struct LivestreamInfo {
+    #[serde(deserialize_with = "deserialize_u64_or_string")]
+    pub id: u64,
+
+    #[serde(default, deserialize_with = "deserialize_option_string_or_number")]
+    pub slug: Option<String>,
+
+    #[serde(default, deserialize_with = "deserialize_option_u64_or_string")]
+    pub channel_id: Option<u64>,
+
+    #[serde(default, deserialize_with = "deserialize_option_string_or_number")]
+    pub session_title: Option<String>,
+
+    #[serde(default)]
+    pub is_live: bool,
+
+    #[serde(default)]
+    pub is_mature: bool,
+
+    #[serde(default, deserialize_with = "deserialize_option_string_or_number")]
+    pub language: Option<String>,
+
+    #[serde(default, deserialize_with = "deserialize_u64_or_string")]
+    pub viewer_count: u64,
+
+    #[serde(default, deserialize_with = "deserialize_option_string_or_number")]
+    pub start_time: Option<String>,
+
+    /// Продолжительность стрима в секундах. Может быть null или отсутствовать.
+    #[serde(default, deserialize_with = "deserialize_option_u64_or_string")]
+    pub duration: Option<u64>,
+
+    #[serde(default)]
+    pub tags: Vec<String>,
+
+    #[serde(default)]
+    pub categories: Vec<LivestreamCategory>,
+}
+
+/// Category information for a livestream.
+#[derive(Debug, Clone, Deserialize)]
+pub struct LivestreamCategory {
+    #[serde(deserialize_with = "deserialize_u64_or_string")]
+    pub id: u64,
+
+    #[serde(deserialize_with = "deserialize_string_or_number")]
+    pub name: String,
+
+    #[serde(deserialize_with = "deserialize_string_or_number")]
+    pub slug: String,
+
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
 /// A currently live stream with category and broadcaster info
-///
-/// Returned by the `GET /livestreams` endpoint.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Livestream {
-    /// The broadcaster's user ID
+    #[serde(deserialize_with = "deserialize_u64_or_string")]
     pub broadcaster_user_id: u64,
 
-    /// Stream category info
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<LivestreamCategoryInfo>,
 
-    /// Channel ID
+    #[serde(deserialize_with = "deserialize_u64_or_string")]
     pub channel_id: u64,
 
-    /// Custom tags set by the streamer
     #[serde(default)]
     pub custom_tags: Vec<String>,
 
-    /// Whether the stream is marked as mature
     pub has_mature_content: bool,
 
-    /// Stream language code (e.g., "en")
+    #[serde(deserialize_with = "deserialize_string_or_number")]
     pub language: String,
 
-    /// Broadcaster's profile picture URL
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile_picture: Option<String>,
 
-    /// Channel slug (username)
+    #[serde(deserialize_with = "deserialize_string_or_number")]
     pub slug: String,
 
-    /// When the stream started (ISO 8601)
-    pub started_at: String,
+    #[serde(default, deserialize_with = "deserialize_option_string_or_number")]
+    pub started_at: Option<String>,
 
-    /// Stream title
+    #[serde(deserialize_with = "deserialize_string_or_number")]
     pub stream_title: String,
 
-    /// Thumbnail URL
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thumbnail: Option<String>,
 
-    /// Current viewer count
+    #[serde(deserialize_with = "deserialize_u64_or_string")]
     pub viewer_count: u64,
 }
 
 /// Category info within a livestream response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LivestreamCategoryInfo {
-    /// Category ID
+    #[serde(deserialize_with = "deserialize_u32_or_string")]
     pub id: u32,
 
-    /// Category name
+    #[serde(deserialize_with = "deserialize_string_or_number")]
     pub name: String,
 
-    /// Category slug
     #[serde(skip_serializing_if = "Option::is_none")]
     pub slug: Option<String>,
 }
 
 /// Global livestream statistics
-///
-/// Returned by the `GET /livestreams/stats` endpoint.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LivestreamStats {
-    /// Total number of live streams on Kick right now
+    #[serde(deserialize_with = "deserialize_u64_or_string")]
     pub total_count: u64,
 }
 
 /// Sort order for livestream queries
 #[derive(Debug, Clone, Copy)]
 pub enum LivestreamSort {
-    /// Sort by viewer count (highest first) — default
     ViewerCount,
-    /// Sort by stream start time (most recent first)
     StartedAt,
 }
 

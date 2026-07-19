@@ -1,90 +1,64 @@
 use serde::{Deserialize, Serialize};
 
+use super::helpers::{
+    deserialize_u32_or_string,
+    deserialize_string_or_number,
+    deserialize_option_string_or_number,
+};
+
 /// Channel information
-///
-/// Returned when fetching channel data via the `/channels` endpoint
-///
-/// # Example Response
-/// ```json
-/// {
-///   "broadcaster_user_id": 123456,
-///   "slug": "xqc",
-///   "stream_title": "LIVE NOW",
-///   "channel_description": "Welcome to my channel!"
-/// }
-/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Channel {
-    /// Number of active subscribers
+    #[serde(deserialize_with = "deserialize_u32_or_string")]
     pub active_subscribers_count: u32,
 
-    /// Banner picture URL
     #[serde(skip_serializing_if = "Option::is_none")]
     pub banner_picture: Option<String>,
 
-    /// Unique broadcaster user identifier
+    #[serde(deserialize_with = "deserialize_u32_or_string")]
     pub broadcaster_user_id: u32,
 
-    /// Number of canceled subscribers
+    #[serde(deserialize_with = "deserialize_u32_or_string")]
     pub canceled_subscribers_count: u32,
 
-    /// Current stream category
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<Category>,
 
-    /// Channel description text
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_option_string_or_number")]
     pub channel_description: Option<String>,
 
-    /// Channel URL slug (unique username)
+    #[serde(deserialize_with = "deserialize_string_or_number")]
     pub slug: String,
 
-    /// Current stream information (if live)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<Stream>,
 
-    /// Current stream title
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_option_string_or_number")]
     pub stream_title: Option<String>,
 }
 
 /// Stream category information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Category {
-    /// Unique category identifier
+    #[serde(deserialize_with = "deserialize_u32_or_string")]
     pub id: u32,
 
-    /// Category name (e.g., "Just Chatting", "Fortnite")
+    #[serde(deserialize_with = "deserialize_string_or_number")]
     pub name: String,
 
-    /// Category thumbnail URL
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thumbnail: Option<String>,
 }
 
 /// Request body for updating channel/livestream metadata
-///
-/// At least one field must be specified. Requires `channel:write` scope.
-///
-/// # Example
-/// ```
-/// let update = kick_api::UpdateChannelRequest {
-///     category_id: None,
-///     stream_title: Some("New stream title!".to_string()),
-///     custom_tags: Some(vec!["rust".to_string(), "coding".to_string()]),
-/// };
-/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateChannelRequest {
-    /// Category ID to set for the stream (minimum 1)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category_id: Option<u32>,
 
-    /// Stream title (minimum 1 character)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream_title: Option<String>,
 
-    /// Custom tags for the stream (maximum 10)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub custom_tags: Option<Vec<String>>,
 }
@@ -92,32 +66,26 @@ pub struct UpdateChannelRequest {
 /// Live stream information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Stream {
-    /// Custom tags set by the streamer
     #[serde(default)]
     pub custom_tags: Vec<String>,
 
-    /// Whether the stream is currently live
     pub is_live: bool,
 
-    /// Whether the stream is marked as mature content
     pub is_mature: bool,
 
-    /// Stream key identifier
     pub key: String,
 
-    /// Stream language code (e.g., "en")
+    #[serde(deserialize_with = "deserialize_string_or_number")]
     pub language: String,
 
-    /// When the stream started (ISO 8601)
+    #[serde(deserialize_with = "deserialize_string_or_number")]
     pub start_time: String,
 
-    /// Stream thumbnail URL
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thumbnail: Option<String>,
 
-    /// Stream URL
     pub url: String,
 
-    /// Current viewer count
+    #[serde(deserialize_with = "deserialize_u32_or_string")]
     pub viewer_count: u32,
 }

@@ -1,6 +1,6 @@
 [package]
 name = "kick-api"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2024"
 description = "Rust client for the Kick.com API"
 license = "MIT OR Apache-2.0"
@@ -10,6 +10,7 @@ categories = ["api-bindings"]
 
 [dependencies]
 reqwest = { version = "0.12", features = ["json"] }
+serde_with = "3.0"
 tokio = { version = "1", features = ["time", "process"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
