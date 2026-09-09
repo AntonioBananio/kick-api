@@ -42,6 +42,18 @@ pub enum KickApiError {
     #[error("API returned an error: {0}")]
     ApiError(String),
 
+    /// Kick returned a non-2xx HTTP status. Unlike [`ApiError`](Self::ApiError)
+    /// (a free-form message, usually built from a parse failure), this variant
+    /// carries the actual status code and raw response body structurally, so
+    /// callers can branch on `status` (e.g. 429, 403) without string-matching
+    /// an error message.
+    ///
+    /// Currently only returned by [`crate::fetch_channel_info`] — curl-backed
+    /// calls can read the real HTTP status via `-w`, so a non-2xx response no
+    /// longer has to masquerade as a JSON parse failure.
+    #[error("HTTP {status}: {body}")]
+    HttpStatus { status: u16, body: String },
+
     /// A catch-all for errors that don't fit other variants (e.g. `curl` not
     /// found when calling unofficial API functions).
     #[error("Unexpected error: {0}")]

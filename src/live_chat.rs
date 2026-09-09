@@ -331,8 +331,41 @@ pub async fn fetch_followed_channels(token: &str) -> Result<FollowedChannelsResp
 async fn fetch_channel_info_inner(username: &str) -> Result<ChannelInfo> {
     let url = format!("https://kick.com/api/v2/channels/{}", username);
 
+    // ИСПРАВЛЕНО: `curl -s` без `--fail`/`-f` считает процесс успешным
+    // (exit code 0) независимо от HTTP-статуса ответа — 200, 403, 429,
+    // что угодно, тело отдаётся как есть. Раньше единственным способом
+    // узнать об ошибке было упасть на serde_json::from_slice (в теле
+    // страницы блокировки/ошибки нет поля `id` → "missing field id") —
+    // то есть настоящие HTTP-ошибки (403/429/блокировка Cloudflare)
+    // маскировались под "не смог распарсить ChannelInfo". Вызывающая
+    // сторона ловила это как ошибку парсинга и делала ВТОРОЙ, отдельный
+    // запрос другим транспортом, чтобы наконец узнать реальный HTTP-код
+    // — то есть каждая первая поимка блока стоила ДВУХ запросов к Kick
+    // вместо одного.
+    //
+    // Теперь curl сам возвращает HTTP-код вместе с телом через `-w`
+    // (маркер + %{http_code} после тела), и при не-2xx мы возвращаем
+    // Err(KickApiError::HttpStatus{..}) сразу, без попытки парсить тело
+    // как ChannelInfo — вызывающая сторона получает реальный код одним
+    // запросом и решает, что с ним делать (настоящий это блок или нет),
+    // сама — эта библиотека такое решение не принимает.
+    //
+    // Retry-After здесь не читаем: у curl нет по-настоящему переносимого
+    // способа вытащить один конкретный заголовок ответа через `-w` на
+    // всех версиях (тех, что идут в комплекте с Windows 10+/macOS/
+    // большинством дистрибутивов Linux) — а несовместимость с более
+    // старым curl тут дороже точности. Вызывающая сторона при отсутствии
+    // Retry-After просто использует свой разумный дефолт.
+    const STATUS_MARKER: &str = "\n__KICK_API_HTTP_STATUS__";
+
     let mut cmd = tokio::process::Command::new("curl");
-    cmd.args(["-s", "-H", "Accept: application/json", "-H", "User-Agent: Chatterino7", &url]);
+    cmd.args([
+        "-s",
+        "-H", "Accept: application/json",
+        "-H", "User-Agent: Chatterino7",
+        "-w", &format!("{STATUS_MARKER}%{{http_code}}"),
+        &url,
+    ]);
 
     // Prevent a visible console window from flashing on Windows
     #[cfg(target_os = "windows")]
@@ -357,12 +390,56 @@ async fn fetch_channel_info_inner(username: &str) -> Result<ChannelInfo> {
         )));
     }
 
-    let info: ChannelInfo = serde_json::from_slice(&output.stdout)
+    let (body, http_status) = split_curl_status(&output.stdout, STATUS_MARKER);
+
+    if let Some(status) = http_status {
+        if !(200..300).contains(&status) {
+            return Err(KickApiError::HttpStatus {
+                status,
+                body: String::from_utf8_lossy(body).trim().to_string(),
+            });
+        }
+    }
+    // http_status == None (маркер не нашёлся — старый curl без
+    // поддержки -w или что-то пошло не так с его выводом) — не считаем
+    // это фатальным, просто пробуем распарсить тело как раньше; если
+    // это и правда была ошибка без узнаваемого статуса, дальнейший
+    // serde_json::from_slice всё равно её поймает как раньше.
+
+    let info: ChannelInfo = serde_json::from_slice(body)
         .map_err(|e| KickApiError::ApiError(format!(
             "Failed to parse channel response for '{}': {}", username, e
         )))?;
 
     Ok(info)
+}
+
+/// Разбивает вывод curl (с добавленным через `-w` маркером статуса) на
+/// (тело, http_status). Если маркер не найден в выводе (старая версия
+/// curl без поддержки `-w`, либо что-то пошло не так) — возвращает весь
+/// вывод как тело и `None` вместо статуса, чтобы не потерять данные
+/// молча и не выдать заведомо неверный код.
+fn split_curl_status<'a>(output: &'a [u8], marker: &str) -> (&'a [u8], Option<u16>) {
+    let marker_bytes = marker.as_bytes();
+
+    match find_subslice(output, marker_bytes) {
+        Some(pos) => {
+            let body = &output[..pos];
+            let status_bytes = &output[pos + marker_bytes.len()..];
+            let status = std::str::from_utf8(status_bytes)
+                .ok()
+                .and_then(|s| s.trim().parse::<u16>().ok());
+            (body, status)
+        }
+        None => (output, None),
+    }
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() || haystack.len() < needle.len() {
+        return None;
+    }
+    haystack.windows(needle.len()).position(|w| w == needle)
 }
 
 /// Wait for a specific Pusher event on the WebSocket.
