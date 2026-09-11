@@ -21,6 +21,17 @@ pub struct OAuthTokenResponse {
     pub expires_in: u64,
 
     /// Space-separated list of granted scopes
+    ///
+    /// ИСПРАВЛЕНО: ответ на grant_type=client_credentials (App Access
+    /// Token, см. get_app_access_token) вообще не содержит поле scope —
+    /// подтверждено реальным ответом Kick: {"access_token":"...",
+    /// "expires_in":...,"token_type":"Bearer"}, без scope. Раньше поле
+    /// было обязательным, и это ломало десериализацию именно App Access
+    /// Token'а ошибкой "missing field `scope`", хотя ответ был абсолютно
+    /// валидным. #[serde(default)] — если поле есть (как в ответах
+    /// authorization_code/refresh_token), оно заполняется как раньше;
+    /// если его нет — просто пустая строка, не ошибка.
+    #[serde(default)]
     pub scope: String,
 
     /// Token type (typically "Bearer")
